@@ -362,8 +362,9 @@ missing &lt;- packages[!(packages %in% installed.packages()[,&quot;Package&quot;
 if(length(missing)) install.packages(missing)
 
 invisible(lapply(packages, library, character.only = TRUE))
-
-# Download large TSV from Google Drive
+print(&quot;All packages are installed and loaded.&quot;)</code></pre>
+<pre><code>## [1] &quot;All packages are installed and loaded.&quot;</code></pre>
+<pre class="r"><code># Download large TSV from Google Drive
 url &lt;- &quot;https://drive.google.com/uc?export=download&amp;id=1RS42VqS7R74slhqcsLPpP6t6zQgrNC2A&quot;
 destfile &lt;- &quot;data/large_file.tsv&quot;</code></pre>
 

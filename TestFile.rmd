@@ -12,7 +12,7 @@ missing <- packages[!(packages %in% installed.packages()[,"Package"])]
 if(length(missing)) install.packages(missing)
 
 invisible(lapply(packages, library, character.only = TRUE))
-
+print("All packages are installed and loaded.")
 # Download large TSV from Google Drive
 url <- "https://drive.google.com/uc?export=download&id=1RS42VqS7R74slhqcsLPpP6t6zQgrNC2A"
 destfile <- "data/large_file.tsv"
