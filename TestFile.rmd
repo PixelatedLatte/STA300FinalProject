@@ -1,0 +1,21 @@
+---
+title: "STA300FinalReport"
+author: "Jacob Blankenship"
+date: "12/9/2025"
+output: html_document
+---
+
+```{r InitialUploads, message=FALSE, warning=FALSE}
+# Install and load packages
+packages <- c("ggplot2", "dplyr", "readxl", "rmarkdown", "knitr")
+missing <- packages[!(packages %in% installed.packages()[,"Package"])]
+if(length(missing)) install.packages(missing)
+
+invisible(lapply(packages, library, character.only = TRUE))
+
+# Download large TSV from Google Drive
+url <- "https://drive.google.com/uc?export=download&id=1RS42VqS7R74slhqcsLPpP6t6zQgrNC2A"
+destfile <- "data/large_file.tsv"
+
+
+```
