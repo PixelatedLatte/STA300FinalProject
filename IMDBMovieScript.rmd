@@ -1,0 +1,58 @@
+---
+title: "STA300FinalReport"
+author: "Jacob Blankenship"
+date: "12/9/2025"
+output: html_document
+---
+
+```{r InitialUploads}
+# initial packages install
+packages <- c("ggplot2", "dplyr", "readxl", "tidyr", "forcats")
+# only install packages I haven't installed
+missing <- packages[!(packages %in% installed.packages()[,"Package"])]
+if (length(missing) > 0) install.packages(missing)
+
+invisible(lapply(packages, library, character.only = TRUE))
+
+```
+
+Write a memo using R Markdown to describe your process for creating your final figure. Your memo should include brief descriptions of the following:
+
+    Any data cleaning, wrangling, manipulating, etc. that you did.
+    Any earlier iterations of figures you tried out before landing on your final figure.
+    Any interactions with an AI tool (optional)
+    The main takeaways from your figure.  What is the central story that your figure is communicating?
+    Your final figure should be included as an image in an Rmd chunk (e.g., from Lab 9:
+    
+```{r DataCleaning}
+    # Data of pull: 12/8/25
+    IMDBmovieData <- read_excel("MovieDataSTA300.xlsx")
+
+    IMDBmovieData <- IMDBmovieData %>%
+  mutate(genres = as.character(basics.genres)) %>%
+  mutate(across(where(is.character), ~ na_if(., "\\N"))) %>% filter(titleType == "tvMovie" | titleType == "movie", isAdult != 1) %>% select(-basics.genres, -isAdult)
+
+# Split 'genres' into multiple rows (one genre per row)
+IMDB_long <- IMDBmovieData %>%
+  separate_rows(genres, sep = ",") %>%
+  mutate(genres = trimws(genres))# remove extra spaces
+
+```
+
+
+```{r DataVisualizing}
+IMDB_long %>%
+  # remove rows with NA in rating or genre
+  filter(!is.na(averageRating) & !is.na(genres)) %>%
+  # reorder genres by descending median rating
+  mutate(genres = fct_reorder(genres, -averageRating, .fun = median, .desc = TRUE)) %>%
+  ggplot(aes(x = genres, y = averageRating)) +
+  geom_boxplot() +
+  coord_flip() +
+  theme_minimal() +
+  labs(
+    title = "Distribution of Average Ratings by Genre (Descending Median)",
+    x = "Genre",
+    y = "Average Rating"
+  )
+```
