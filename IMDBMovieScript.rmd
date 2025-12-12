@@ -7,7 +7,7 @@ output: html_document
 
 ```{r InitialUploads}
 # initial packages install
-packages <- c("ggplot2", "dplyr", "readxl", "tidyr", "forcats")
+packages <- c("ggplot2", "dplyr", "readxl", "tidyr", "forcats", "ggrepel")
 # only install packages I haven't installed
 missing <- packages[!(packages %in% installed.packages()[,"Package"])]
 if (length(missing) > 0) install.packages(missing)
@@ -15,6 +15,14 @@ if (length(missing) > 0) install.packages(missing)
 invisible(lapply(packages, library, character.only = TRUE))
 
 ```
+
+When looking at my possible datasets to use, I saw the IMDB movie files. Wanting a challenge in how to parse over a gigabyte of movie data, I decided to use it as my data source. I used the **title.basics.tsv.gz** and **title.ratings.tsv.gz** datasets, with a pull on 12/8/25 (data is live, so future files will be different).
+
+I needed a way to parse the millions of rows and billions of characters of data in the tsv's, as well as merge both datasets in a meaningful manner. After multiple attempts, the method that worked was with a Power Query merge. I took both datasets, filter the ratings table to only include entries with >= 10000 votes, and merged the basics.tsv (a dataset that includes things such as genre, runtime, and title data) with a left join.
+
+Afterwards I had about 17000 IMDB entries to utilize.
+
+My research question: How does movie attributes change over time?
 
 Write a memo using R Markdown to describe your process for creating your final figure. Your memo should include brief descriptions of the following:
 
@@ -25,34 +33,174 @@ Write a memo using R Markdown to describe your process for creating your final f
     Your final figure should be included as an image in an Rmd chunk (e.g., from Lab 9:
     
 ```{r DataCleaning}
-    # Data of pull: 12/8/25
-    IMDBmovieData <- read_excel("MovieDataSTA300.xlsx")
-
-    IMDBmovieData <- IMDBmovieData %>%
+# Data of pull: 12/8/25
+IMDBmovieData <- read_excel("MovieDataSTA300.xlsx")
+IMDBmovieData <- IMDBmovieData %>%
   mutate(genres = as.character(basics.genres)) %>%
-  mutate(across(where(is.character), ~ na_if(., "\\N"))) %>% filter(titleType == "tvMovie" | titleType == "movie", isAdult != 1) %>% select(-basics.genres, -isAdult)
+  mutate(across(where(is.character), ~ na_if(., "\\N"))) %>% filter(titleType == "tvMovie" |
+                                                                      titleType == "movie", isAdult != 1) %>% select(-basics.genres, -isAdult)
+IMDBmovieData$runtimeMinutes <- as.numeric(IMDBmovieData$runtimeMinutes)
+
 
 # Split 'genres' into multiple rows (one genre per row)
 IMDB_long <- IMDBmovieData %>%
   separate_rows(genres, sep = ",") %>%
   mutate(genres = trimws(genres))# remove extra spaces
 
+IMDB_year <- IMDBmovieData %>% filter(!is.na(averageRating) &
+                                        !is.na(genres) &
+                                        !is.na(startYear)) %>% mutate(year_bin = floor(startYear / 5) * 5) %>%
+  group_by(year_bin) %>% summarise(average_rating = mean(averageRating, na.rm = TRUE))
+
+IMDB_runtime <- IMDBmovieData %>% filter(!is.na(averageRating) &
+                                           !is.na(genres) &
+                                           !is.na(startYear)) %>% 
+  mutate(year_bin = floor(startYear / 5) * 5) %>%
+  group_by(year_bin) %>% summarise(runtimeMinutes = mean(runtimeMinutes, na.rm = TRUE))
+
+IMDB_heat <- IMDBmovieData %>% filter(!is.na(averageRating) &
+                                           !is.na(genres) &
+                                           !is.na(startYear)) %>% 
+  mutate(year_bin = floor(startYear / 10) * 10) %>% group_by(year_bin) %>% summarise(runtimeMinutes = mean(runtimeMinutes, na.rm = TRUE), average_rating = mean(averageRating, na.rm = TRUE))
+
+IMDB_year_ci <- IMDBmovieData %>% 
+  filter(!is.na(averageRating) & !is.na(startYear)) %>%
+  mutate(year_bin = floor(startYear / 5) * 5) %>%
+  group_by(year_bin) %>% 
+  summarise(
+    avg_rating = mean(averageRating, na.rm = TRUE),
+    se = sd(averageRating, na.rm = TRUE) / sqrt(n()),
+    ci_lower = avg_rating - 1.96 * se,  # 95% CI
+    ci_upper = avg_rating + 1.96 * se,
+    n = n()
+  )
+
+IMDB_topMovies <- IMDBmovieData %>% arrange(-averageRating) %>% head(10) %>% mutate(decade = floor(startYear /10) * 10) %>%
+  filter(!is.na(startYear)) %>%
+  mutate(decade = floor(startYear / 10) * 10) %>%
+  count(decade) %>%
+  mutate(
+    percentage = n / sum(n) * 100,
+  )
 ```
 
 
-```{r DataVisualizing}
-IMDB_long %>%
-  # remove rows with NA in rating or genre
-  filter(!is.na(averageRating) & !is.na(genres)) %>%
-  # reorder genres by descending median rating
-  mutate(genres = fct_reorder(genres, -averageRating, .fun = median, .desc = TRUE)) %>%
-  ggplot(aes(x = genres, y = averageRating)) +
-  geom_boxplot() +
-  coord_flip() +
-  theme_minimal() +
-  labs(
-    title = "Distribution of Average Ratings by Genre (Descending Median)",
-    x = "Genre",
-    y = "Average Rating"
+```{r Plot1}
+# Plot1Labs <- labs(
+#     title = "Average Popular Movie Ratings by Year",
+#     x = "Year",
+#     y = "Average Movie Rating",
+#     caption = "Data from IMDB.com from movies with >10k votes"
+#   )
+# Plot1Theme <- theme_minimal() + theme(plot.title = element_text(hjust = 0.5))
+# IMDB_year %>%
+#   ggplot(aes(x = year_bin, y = average_rating, fill = average_rating)) +
+#   geom_col(col = "gray20") +
+#   scale_fill_gradient(low = "#E81B23", high = "#00AEF3", name = "Rating") +
+#   coord_cartesian(ylim = c(6, 8)) +
+#   scale_y_continuous(breaks = seq(6, 8, by = 0.5)) + Plot1Labs + Plot1Theme
+```
+
+```{r Plot2}
+# Plot1Labs <- labs(
+#     title = "Average Popular Movie Ratings by Year",
+#     x = "Year",
+#     y = "Average Movie Rating",
+#     caption = "Data from IMDB.com from movies with >10k votes"
+#   )
+# Plot1Theme <- theme_minimal() + theme(plot.title = element_text(hjust = 0.5))
+# IMDB_runtime %>%
+#   ggplot(aes(x = year_bin, y = runtimeMinutes, fill = runtimeMinutes)) +
+#   geom_col(col = "gray20") +
+#   scale_fill_gradient(low = "#E81B23", high = "#00AEF3", name = "Rating") + coord_cartesian(ylim = c(50, 150)) + scale_y_continuous(breaks = seq(50, 150, by = 10)) + Plot1Labs + Plot1Theme
+```
+
+
+```{r Heatmap, warning= FALSE}
+HeatmapLabs <- labs(
+  title = "Movie Density over the Years: Runtime vs Rating",
+  x = "Runtime (minutes)",
+  y = "Average Rating",
+  caption = "Data from IMDB.com from movies with >10k votes"
+)
+HeatmapTheme <- theme_dark() + theme(
+  axis.text.x = element_text(face = "bold"),
+  axis.text.y = element_text(face = "bold"),
+  axis.title.x = element_text(face = "bold"),
+  axis.title.y = element_text(face = "bold"),
+  plot.title = element_text(hjust = 0.5, face = "bold")
+)
+
+IMDBmovieData %>%
+  mutate(
+    runtime_bin = floor(runtimeMinutes / 2.5) * 2.5,
+    rating_bin = floor(averageRating / 0.25) * 0.25
+  ) %>%
+  count(runtime_bin, rating_bin) %>%
+  ggplot(aes(x = runtime_bin, y = rating_bin)) +
+  geom_tile(aes(fill = n)) +
+  geom_point(
+    data = IMDB_heat,
+    aes(x = runtimeMinutes, y = average_rating),
+    shape = 21,
+    color = "yellow",
+    stroke = 1.5,
+    size = 2
+  ) +
+  geom_label_repel(
+    data = IMDB_heat,
+    aes(x = runtimeMinutes, y = average_rating, label = year_bin),
+    color = "white",
+    fill = "black",
+    size = 3.5,
+    fontface = "bold",
+    box.padding = 1,
+    point.padding = 1,
+    max.overlaps = Inf
+  ) +
+  scale_fill_viridis_c(option = "plasma", name = "Count") +
+  scale_y_continuous(breaks = seq(2, 10, by = 1), limits = c(2, 10)) +
+  scale_x_continuous(breaks = seq(40, 200, by = 10), limits = c(40, 200)) +
+  HeatmapLabs + HeatmapTheme
+```
+
+```{r UncertaintyRatings}
+UncertaintyLabs <- labs(
+    title = "Average Movie Ratings Over Time",
+    x = "Year",
+    y = "Average Rating",
+    caption = "95% CI. Data from IMDB.com from movies with >10k votes"
   )
+UncertaintyTheme <- theme_minimal() + theme(
+  axis.text.x = element_text(face = "bold"),
+  axis.text.y = element_text(face = "bold"),
+  axis.title.x = element_text(face = "bold"),
+  axis.title.y = element_text(face = "bold"),
+  plot.title = element_text(hjust = 0.5, face = "bold"))
+  
+ggplot(IMDB_year_ci, aes(x = year_bin, y = avg_rating)) +
+  geom_ribbon(aes(ymin = ci_lower, ymax = ci_upper),
+              alpha = 0.3,
+              fill = "skyblue") +
+  geom_line(color = "darkblue", size = 1) + geom_line(aes(x = year_bin, y = ci_upper),
+                                                      color = "gray",
+                                                      alpha = .75) + 
+  geom_line(aes(x = year_bin, y = ci_lower), color = "gray", alpha = .75) + geom_point(color = "darkblue", size = 2) + UncertaintyLabs + UncertaintyTheme +   scale_x_continuous(breaks = seq(1910, 2020, by = 10), limits = c(1915, 2025))
+```
+
+```{r PieChart}
+# Create the pie chart
+PieTheme <- theme_void() +
+  theme(legend.position = "right",
+        legend.title = element_text(face = "bold", size = 12),
+        plot.title = element_text(hjust = 0.5, face = "bold", size = 14))
+PieLabs <-  labs(title = "Distribution of Top 10 Movies by Decade",
+       caption = "Data from IMDB.com top 50 rated movies with >10k votes")
+
+IMDB_topMovies %>% ggplot(aes(x = "", y = n, fill = decade)) +
+  geom_col(color = "black") +
+    geom_label(aes(label = decade),
+             color = "white", fill = "black",
+             position = position_stack(vjust = 0.5))  +
+  coord_polar(theta = "y") + PieLabs + PieTheme + guides(fill = guide_legend(title = "Decade"))
 ```
